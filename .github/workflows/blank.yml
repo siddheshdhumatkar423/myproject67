@@ -39,6 +39,7 @@ jobs:
           ${{ runner.os }}-node-
 
     - name: Install dependencies
+      working-directory: ./myproject67
       run: npm install
 
     - name: SonarQube Scan
