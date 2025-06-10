@@ -57,6 +57,10 @@ jobs:
           -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
           -Dsonar.login=${{ env.SONAR_TOKEN }}
 
+    # Create output directory for Dependency Check report
+    - name: Create output directory for Dependency Check report
+      run: mkdir -p ${{ github.workspace }}/dependency-check-report
+
     # Run OWASP Dependency Check for vulnerabilities in dependencies
     - name: Run OWASP Dependency Check
       run: |
@@ -94,7 +98,7 @@ jobs:
 
     # Deploy to Kubernetes using SCP to copy the manifests
     - name: Deploy to Kubernetes (SCP)
-      uses: appleboy/scp-action@v0.1.0  # Correct version here
+      uses: appleboy/scp-action@v0.0.1
       with:
         host: ${{ secrets.K8S_MASTER_IP }}
         username: ${{ secrets.K8S_USER }}
@@ -104,7 +108,7 @@ jobs:
 
     # Apply Kubernetes manifests using SSH
     - name: Apply Kubernetes Manifests (SSH)
-      uses: appleboy/ssh-action@v0.1.0  # Correct version here
+      uses: appleboy/ssh-action@v0.1.0
       with:
         host: ${{ secrets.K8S_MASTER_IP }}
         username: ${{ secrets.K8S_USER }}
