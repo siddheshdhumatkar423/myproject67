@@ -13,7 +13,7 @@ jobs:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-      TMDB_API_KEY: Aj7ay86fe14eca3e76869b92
+      TMDB_API_KEY: b9abde186dca45d260b8a9149624700d
 
     steps:
     - name: Checkout Code
