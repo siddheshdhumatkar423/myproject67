@@ -35,7 +35,8 @@ jobs:
       with:
         path: ~/.npm
         key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-        restore-keys: ${{ runner.os }}-node-
+        restore-keys: |
+          ${{ runner.os }}-node-
 
     - name: Install dependencies
       run: npm install
@@ -47,7 +48,7 @@ jobs:
         ./sonar-scanner-*/bin/sonar-scanner \
           -Dsonar.projectKey=Netflix \
           -Dsonar.sources=. \
-          -Dsonar.host.url=http://${{ secrets.SONAR_HOST }}:9000 \
+          -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
           -Dsonar.login=${{ env.SONAR_TOKEN }}
 
     - name: Run OWASP Dependency Check
@@ -71,15 +72,15 @@ jobs:
 
     - name: Push Docker Image
       run: |
-        docker tag netflix ${{ env.DOCKER_USERNAME }}/netflix:${{ github.sha }}
-        docker push ${{ env.DOCKER_USERNAME }}/netflix:${{ github.sha }}
+        docker tag netflix ${{ env.DOCKER_USERNAME }}/netflix:latest
+        docker push ${{ env.DOCKER_USERNAME }}/netflix:latest
 
     - name: Trivy Image Scan
       run: |
-        docker run --rm aquasec/trivy image ${{ env.DOCKER_USERNAME }}/netflix:${{ github.sha }} > trivyimage.txt
+        docker run --rm aquasec/trivy image ${{ env.DOCKER_USERNAME }}/netflix:latest > trivyimage.txt
 
     - name: Deploy to Kubernetes
-      uses: appleboy/scp-action@v0.1.5
+      uses: appleboy/scp-action@master
       with:
         host: ${{ secrets.K8S_MASTER_IP }}
         username: ${{ secrets.K8S_USER }}
@@ -88,7 +89,7 @@ jobs:
         target: "/tmp"
 
     - name: Apply Kubernetes Manifests
-      uses: appleboy/ssh-action@v0.1.8
+      uses: appleboy/ssh-action@master
       with:
         host: ${{ secrets.K8S_MASTER_IP }}
         username: ${{ secrets.K8S_USER }}
