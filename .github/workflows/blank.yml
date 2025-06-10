@@ -87,7 +87,7 @@ jobs:
         docker run --rm aquasec/trivy image ${{ env.DOCKER_USERNAME }}/netflix:latest > trivyimage.txt
 
     - name: Deploy to Kubernetes
-      uses: appleboy/scp-action@v0.0.0
+      uses: appleboy/scp-action@v0.1.0  # Corrected version
       with:
         host: ${{ secrets.K8S_MASTER_IP }}
         username: ${{ secrets.K8S_USER }}
@@ -96,7 +96,7 @@ jobs:
         target: "/tmp"
 
     - name: Apply Kubernetes Manifests
-      uses: appleboy/ssh-action@v0.0.0
+      uses: appleboy/ssh-action@v0.1.0  # Corrected version
       with:
         host: ${{ secrets.K8S_MASTER_IP }}
         username: ${{ secrets.K8S_USER }}
