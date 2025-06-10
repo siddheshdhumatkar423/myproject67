@@ -104,7 +104,7 @@ jobs:
 
     # Apply Kubernetes manifests using SSH
     - name: Apply Kubernetes Manifests (SSH)
-      uses: appleboy/ssh-action@v0.1.0
+      uses: appleboy/scp-action@v0.1.0 
       with:
         host: ${{ secrets.K8S_MASTER_IP }}
         username: ${{ secrets.K8S_USER }}
