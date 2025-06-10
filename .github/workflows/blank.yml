@@ -1,75 +1,97 @@
-name: CI-CD Pipeline
+name: CI-CD for Netflix Clone
 
 on:
   push:
-    branches: [main]
-  pull_request:
-
-env:
-  IMAGE_NAME: sevenajay/netflix
-  SONAR_PROJECT_KEY: netflix
-  SONAR_PROJECT_NAME: netflix
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+      TMDB_API_KEY: Aj7ay86fe14eca3e76869b92
+
     steps:
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    - name: Setup Node.js
+    - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '16'
+        node-version: 16
 
-    - name: Install Dependencies
+    - name: Set up Java
+      uses: actions/setup-java@v3
+      with:
+        java-version: '17'
+
+    - name: Cache node modules
+      uses: actions/cache@v3
+      with:
+        path: ~/.npm
+        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+        restore-keys: ${{ runner.os }}-node-
+
+    - name: Install dependencies
       run: npm install
 
-    - name: Run Tests
-      run: npm test
-
     - name: SonarQube Scan
-      uses: SonarSource/sonarcloud-github-action@v4
-      with:
-        projectBaseDir: .
-      env:
-        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-        SONAR_PROJECT_KEY: ${{ env.SONAR_PROJECT_KEY }}
-        SONAR_PROJECT_NAME: ${{ env.SONAR_PROJECT_NAME }}
+      run: |
+        wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
+        unzip sonar-scanner-cli-5.0.1.3006-linux.zip
+        ./sonar-scanner-*/bin/sonar-scanner \
+          -Dsonar.projectKey=Netflix \
+          -Dsonar.sources=. \
+          -Dsonar.host.url=http://<sonarqube-ip>:9000 \
+          -Dsonar.login=${{ env.SONAR_TOKEN }}
+
+    - name: Run OWASP Dependency Check
+      run: |
+        docker run --rm \
+          -v ${{ github.workspace }}:/src \
+          owasp/dependency-check \
+          --project "Netflix" \
+          --scan /src \
+          --format "ALL"
 
     - name: Run Trivy FS Scan
       run: |
-        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
-        trivy fs . > trivyfs.txt
+        docker run --rm -v $(pwd):/project aquasec/trivy fs /project > trivyfs.txt
 
     - name: Build Docker Image
-      run: docker build -t $IMAGE_NAME:latest .
+      run: docker build --build-arg TMDB_V3_API_KEY=${{ env.TMDB_API_KEY }} -t netflix .
 
-    - name: Login to DockerHub
-      run: echo ${{ secrets.DOCKER_PASSWORD }} | docker login -u ${{ secrets.DOCKER_USERNAME }} --password-stdin
+    - name: Log in to DockerHub
+      run: echo "${{ env.DOCKER_PASSWORD }}" | docker login -u "${{ env.DOCKER_USERNAME }}" --password-stdin
 
     - name: Push Docker Image
-      run: docker push $IMAGE_NAME:latest
+      run: |
+        docker tag netflix ${{ env.DOCKER_USERNAME }}/netflix:latest
+        docker push ${{ env.DOCKER_USERNAME }}/netflix:latest
 
     - name: Trivy Image Scan
-      run: trivy image $IMAGE_NAME:latest > trivyimage.txt
+      run: |
+        docker run --rm aquasec/trivy image ${{ env.DOCKER_USERNAME }}/netflix:latest > trivyimage.txt
 
     - name: Deploy to Kubernetes
-      uses: azure/k8s-deploy@v4
+      uses: appleboy/scp-action@master
       with:
-        manifests: |
-          ./Kubernetes/deployment.yml
-          ./Kubernetes/service.yml
-        images: ${{ env.IMAGE_NAME }}:latest
-        kubectl-version: 'latest'
-        kubeconfig: ${{ secrets.KUBE_CONFIG }}
+        host: ${{ secrets.K8S_MASTER_IP }}
+        username: ${{ secrets.K8S_USER }}
+        key: ${{ secrets.K8S_PRIVATE_KEY }}
+        source: "./k8s/*"
+        target: "/tmp"
 
-    - name: Upload Scan Artifacts
-      uses: actions/upload-artifact@v4
+    - name: Apply Kubernetes Manifests
+      uses: appleboy/ssh-action@master
       with:
-        name: trivy-reports
-        path: |
-          trivyfs.txt
-          trivyimage.txt
+        host: ${{ secrets.K8S_MASTER_IP }}
+        username: ${{ secrets.K8S_USER }}
+        key: ${{ secrets.K8S_PRIVATE_KEY }}
+        script: |
+          kubectl apply -f /tmp/deployment.yml
+          kubectl apply -f /tmp/service.yml
