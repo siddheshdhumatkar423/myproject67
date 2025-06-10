@@ -14,6 +14,10 @@ jobs:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
       TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      K8S_MASTER_IP: ${{ secrets.K8S_MASTER_IP }}
+      K8S_USER: ${{ secrets.K8S_USER }}
+      K8S_PRIVATE_KEY: ${{ secrets.K8S_PRIVATE_KEY }}
 
     steps:
     - name: Checkout Code
@@ -39,7 +43,6 @@ jobs:
           ${{ runner.os }}-node-
 
     - name: Install dependencies
-      
       run: npm install
 
     - name: SonarQube Scan
@@ -59,11 +62,14 @@ jobs:
           owasp/dependency-check \
           --project "Netflix" \
           --scan /src \
-          --format "ALL"
+          --format "ALL" \
+          --out /src/dependency-check-report \
+          --disableAssemblyAnalysis \
+          --timeout 120
 
     - name: Run Trivy FS Scan
       run: |
-        docker run --rm -v $(pwd):/project aquasec/trivy fs /project > trivyfs.txt
+        docker run --rm -v ${{ github.workspace }}:/project aquasec/trivy fs /project > trivyfs.txt
 
     - name: Build Docker Image
       run: docker build --build-arg TMDB_V3_API_KEY=${{ env.TMDB_API_KEY }} -t netflix .
@@ -81,7 +87,7 @@ jobs:
         docker run --rm aquasec/trivy image ${{ env.DOCKER_USERNAME }}/netflix:latest > trivyimage.txt
 
     - name: Deploy to Kubernetes
-      uses: appleboy/scp-action@master
+      uses: appleboy/scp-action@v0.0.0
       with:
         host: ${{ secrets.K8S_MASTER_IP }}
         username: ${{ secrets.K8S_USER }}
@@ -90,7 +96,7 @@ jobs:
         target: "/tmp"
 
     - name: Apply Kubernetes Manifests
-      uses: appleboy/ssh-action@master
+      uses: appleboy/ssh-action@v0.0.0
       with:
         host: ${{ secrets.K8S_MASTER_IP }}
         username: ${{ secrets.K8S_USER }}
@@ -98,3 +104,5 @@ jobs:
         script: |
           kubectl apply -f /tmp/deployment.yml
           kubectl apply -f /tmp/service.yml
+          kubectl apply -f /tmp/ingress.yml  # If applicable, you can add ingress
+
