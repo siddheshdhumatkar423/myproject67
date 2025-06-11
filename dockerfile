@@ -1,19 +1,20 @@
-    - name: Checkout Code
-      uses: actions/checkout@v4
+    # Use official Node image as base
+FROM node:16
 
-    - name: Create .env.production file from secret
-      run: echo "${{ secrets.ENV_PRODUCTION }}" > .env.production
+WORKDIR /app
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: 16
+# Copy package files and install dependencies first (for caching)
+COPY package*.json ./
+RUN npm install
 
-    - name: Install dependencies
-      run: npm install
+# Copy env file
+COPY .env.production .env
 
-    - name: Build Docker Image
-      run: |
-        docker build \
-          --build-arg TMDB_V3_API_KEY=${{ env.TMDB_API_KEY }} \
-          -t netflix .
+# Copy rest of the app
+COPY . .
+
+# Build the app
+RUN npm run build
+
+# Start command
+CMD ["npm", "start"]
