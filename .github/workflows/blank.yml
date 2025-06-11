@@ -136,4 +136,7 @@ jobs:
       with:
         host: ${{ secrets.K8S_MASTER_IP }}
         username: ${{ secrets.K8S_USER }}
-        key: ${{ secrets.K8S_PRIVATE_KEY
+        key: ${{ secrets.K8S_PRIVATE_KEY }}
+        script: |
+          kubectl apply -f /tmp/deployment.yml
+          kubectl apply -f /tmp/service.yml
