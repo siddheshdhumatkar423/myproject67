@@ -54,11 +54,23 @@ jobs:
     - name: Create output directory for Dependency Check report
       run: mkdir -p ${{ github.workspace }}/dependency-check-report
 
+    - name: Pull latest OWASP Dependency-Check image
+      run: docker pull owasp/dependency-check:latest
+
+    - name: Update OWASP Dependency Check database
+      run: |
+        docker volume create owasp-data
+        docker run --rm \
+          -v owasp-data:/usr/share/dependency-check/data \
+          owasp/dependency-check:latest \
+          --updateonly
+
     - name: Run OWASP Dependency Check
       run: |
         docker run --rm \
+          -v owasp-data:/usr/share/dependency-check/data \
           -v ${{ github.workspace }}:/src \
-          owasp/dependency-check \
+          owasp/dependency-check:latest \
           --project "Netflix" \
           --scan /src \
           --format "ALL" \
@@ -77,8 +89,19 @@ jobs:
       run: |
         docker run --rm -v $(pwd):/project aquasec/trivy fs /project > trivyfs.txt
 
+    - name: Upload Trivy FS Scan Report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: trivy-fs-report
+        path: trivyfs.txt
+
     - name: Build Docker Image
-      run: docker build --build-arg TMDB_V3_API_KEY=${{ env.TMDB_API_KEY }} -t netflix .
+      run: |
+        docker build \
+          --build-arg TMDB_V3_API_KEY=${{ env.TMDB_API_KEY }} \
+          -t netflix \
+          -f ./app/Dockerfile ./app
 
     - name: Log in to DockerHub
       run: echo "${{ env.DOCKER_PASSWORD }}" | docker login -u "${{ env.DOCKER_USERNAME }}" --password-stdin
@@ -91,6 +114,13 @@ jobs:
     - name: Trivy Image Scan
       run: |
         docker run --rm aquasec/trivy image ${{ env.DOCKER_USERNAME }}/netflix:latest > trivyimage.txt
+
+    - name: Upload Trivy Image Report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: trivy-image-report
+        path: trivyimage.txt
 
     - name: Deploy to Kubernetes (SCP)
       uses: appleboy/scp-action@v0.0.1
@@ -106,7 +136,4 @@ jobs:
       with:
         host: ${{ secrets.K8S_MASTER_IP }}
         username: ${{ secrets.K8S_USER }}
-        key: ${{ secrets.K8S_PRIVATE_KEY }}
-        script: |
-          kubectl apply -f /tmp/deployment.yml
-          kubectl apply -f /tmp/service.yml
+        key: ${{ secrets.K8S_PRIVATE_KEY
