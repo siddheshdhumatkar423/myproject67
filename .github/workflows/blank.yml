@@ -52,18 +52,12 @@ jobs:
           -Dsonar.login=${{ env.SONAR_TOKEN }}
 
     - name: Create output directory for Dependency Check report
-      run: mkdir -p ${{ github.workspace }}/dependency-check-report
+      run: mkdir -p dependency-check-report
 
-    - name: Pull latest OWASP Dependency-Check image
-      run: docker pull owasp/dependency-check:latest
-
-    - name: Update OWASP Dependency Check database
+    - name: Pull OWASP Dependency-Check DB (updateonly)
       run: |
         docker volume create owasp-data
-        docker run --rm \
-          -v owasp-data:/usr/share/dependency-check/data \
-          owasp/dependency-check:latest \
-          --updateonly
+        docker run --rm -v owasp-data:/usr/share/dependency-check/data owasp/dependency-check:latest --updateonly
 
     - name: Run OWASP Dependency Check
       run: |
@@ -75,22 +69,19 @@ jobs:
           --scan /src \
           --format "ALL" \
           --out /src/dependency-check-report \
-          --failOnCVSS 11.0 \
-          --suppression /src/owasp-suppressions.xml || true
+          --failOnCVSS 11.0 || true
 
     - name: Upload Dependency Check Report
-      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: dependency-check-report
-        path: ${{ github.workspace }}/dependency-check-report
+        path: dependency-check-report
 
     - name: Run Trivy FS Scan
       run: |
         docker run --rm -v $(pwd):/project aquasec/trivy fs /project > trivyfs.txt
 
     - name: Upload Trivy FS Scan Report
-      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: trivy-fs-report
@@ -100,8 +91,7 @@ jobs:
       run: |
         docker build \
           --build-arg TMDB_V3_API_KEY=${{ env.TMDB_API_KEY }} \
-          -t netflix \
-          -f ./app/Dockerfile ./app
+          -t netflix .
 
     - name: Log in to DockerHub
       run: echo "${{ env.DOCKER_PASSWORD }}" | docker login -u "${{ env.DOCKER_USERNAME }}" --password-stdin
@@ -116,7 +106,6 @@ jobs:
         docker run --rm aquasec/trivy image ${{ env.DOCKER_USERNAME }}/netflix:latest > trivyimage.txt
 
     - name: Upload Trivy Image Report
-      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: trivy-image-report
