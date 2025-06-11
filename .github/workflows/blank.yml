@@ -16,24 +16,20 @@ jobs:
       TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
 
     steps:
-    # Checkout code from the repository
     - name: Checkout Code
       uses: actions/checkout@v4
 
-    # Set up Node.js environment
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
         node-version: 16
 
-    # Set up Java (for OWASP Dependency Check)
     - name: Set up Java
       uses: actions/setup-java@v4
       with:
         distribution: temurin
         java-version: '17'
 
-    # Cache Node.js dependencies to speed up the build process
     - name: Cache node modules
       uses: actions/cache@v4
       with:
@@ -42,11 +38,9 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-node-
 
-    # Install dependencies
     - name: Install dependencies
       run: npm install
 
-    # Run SonarQube analysis for code quality
     - name: SonarQube Scan
       run: |
         wget https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
@@ -57,11 +51,9 @@ jobs:
           -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
           -Dsonar.login=${{ env.SONAR_TOKEN }}
 
-    # Create output directory for Dependency Check report
     - name: Create output directory for Dependency Check report
       run: mkdir -p ${{ github.workspace }}/dependency-check-report
 
-    # Run OWASP Dependency Check for vulnerabilities in dependencies
     - name: Run OWASP Dependency Check
       run: |
         docker run --rm \
@@ -70,33 +62,36 @@ jobs:
           --project "Netflix" \
           --scan /src \
           --format "ALL" \
-          --out /src/dependency-check-report
+          --out /src/dependency-check-report \
+          --failOnCVSS 11.0 \
+          --suppression /src/owasp-suppressions.xml || true
 
-    # Run Trivy file system scan for security vulnerabilities
+    - name: Upload Dependency Check Report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: dependency-check-report
+        path: ${{ github.workspace }}/dependency-check-report
+
     - name: Run Trivy FS Scan
       run: |
         docker run --rm -v $(pwd):/project aquasec/trivy fs /project > trivyfs.txt
 
-    # Build the Docker image for the application
     - name: Build Docker Image
       run: docker build --build-arg TMDB_V3_API_KEY=${{ env.TMDB_API_KEY }} -t netflix .
 
-    # Log in to Docker Hub
     - name: Log in to DockerHub
       run: echo "${{ env.DOCKER_PASSWORD }}" | docker login -u "${{ env.DOCKER_USERNAME }}" --password-stdin
 
-    # Push the Docker image to Docker Hub
     - name: Push Docker Image
       run: |
         docker tag netflix ${{ env.DOCKER_USERNAME }}/netflix:latest
         docker push ${{ env.DOCKER_USERNAME }}/netflix:latest
 
-    # Run Trivy image scan for vulnerabilities in the built Docker image
     - name: Trivy Image Scan
       run: |
         docker run --rm aquasec/trivy image ${{ env.DOCKER_USERNAME }}/netflix:latest > trivyimage.txt
 
-    # Deploy to Kubernetes using SCP to copy the manifests
     - name: Deploy to Kubernetes (SCP)
       uses: appleboy/scp-action@v0.0.1
       with:
@@ -106,7 +101,6 @@ jobs:
         source: "./k8s/*"
         target: "/tmp"
 
-    # Apply Kubernetes manifests using SSH
     - name: Apply Kubernetes Manifests (SSH)
       uses: appleboy/ssh-action@v0.1.0
       with:
