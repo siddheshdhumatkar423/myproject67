@@ -1,16 +1,19 @@
-FROM node:16 AS build
+    - name: Checkout Code
+      uses: actions/checkout@v4
 
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-COPY . .
+    - name: Create .env.production file from secret
+      run: echo "${{ secrets.ENV_PRODUCTION }}" > .env.production
 
-# Copy .env.production into container before build
-COPY .env.production .env
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 16
 
-RUN npm run build
+    - name: Install dependencies
+      run: npm install
 
-FROM nginx:alpine
-COPY --from=build /app/build /usr/share/nginx/html
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+    - name: Build Docker Image
+      run: |
+        docker build \
+          --build-arg TMDB_V3_API_KEY=${{ env.TMDB_API_KEY }} \
+          -t netflix .
